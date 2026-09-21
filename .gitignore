@@ -1,0 +1,7 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+error.log
+.claude/settings.local.json
+.claude/worktrees/

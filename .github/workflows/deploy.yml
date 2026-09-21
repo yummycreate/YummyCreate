@@ -1,0 +1,196 @@
+name: Deploy
+
+# public/ の中身を、サーバーのドメインルート(web/public_html)へアップロードする。
+# ドメインルートは他プロジェクトのディレクトリと同居しているため、
+#   - アップロードのみ行い、サーバー上のファイルは削除しない
+#   - 他プロジェクトのディレクトリ名(Secret YC_RESERVED_TOPLEVEL)と同じトップレベル名は拒否する
+#   - 配下の全プロジェクトに効くルート直下の .htaccess / .user.ini / php.ini は拒否する
+# 接続情報はすべて Environment "production" の Secrets に置く(公開リポジトリのためコードに書かない)。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://yummycreate.com/
+    env:
+      YC_SOURCE_DIR: public
+      YC_REMOTE_ROOT: web/public_html
+      YC_STAGING_DIR: /tmp/yummycreate-staging
+      YC_SSH_KEY_PATH: /tmp/yc-deploy-key
+      YC_SITE_URL: https://yummycreate.com/
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Assert deployment context
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REPOSITORY:-}" != "yummycreate/YummyCreate" ]; then
+            echo "Unexpected repository: ${GITHUB_REPOSITORY:-unset}" >&2
+            exit 1
+          fi
+          if [ "${GITHUB_REF_NAME:-}" != "main" ]; then
+            echo "Deploy must run from main, got ${GITHUB_REF_NAME:-unset}" >&2
+            exit 1
+          fi
+
+      - name: Stage deploy files
+        run: |
+          set -euo pipefail
+          rm -rf "$YC_STAGING_DIR"
+          mkdir -p "$YC_STAGING_DIR"
+          rsync --archive \
+            --exclude='.DS_Store' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='.git*' \
+            "$YC_SOURCE_DIR/" "$YC_STAGING_DIR/"
+          echo "Staged files:"
+          (cd "$YC_STAGING_DIR" && find . -type f | sed 's#^\./##' | sort)
+
+      - name: Validate deploy paths
+        env:
+          YC_RESERVED_TOPLEVEL: ${{ secrets.YC_RESERVED_TOPLEVEL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${YC_RESERVED_TOPLEVEL:-}" ]; then
+            echo "Set YC_RESERVED_TOPLEVEL (production environment secret) before deploying" >&2
+            exit 1
+          fi
+          reserved=" $(printf '%s' "$YC_RESERVED_TOPLEVEL" | tr '[:upper:]' '[:lower:]' | tr ',' ' ' | tr -s '[:space:]' ' ') "
+
+          errors=0
+          while IFS= read -r path; do
+            case "$path" in
+              ""|/*|*"/../"*|"../"*|*"/.."|".."|*[!+A-Za-z0-9._/-]*)
+                echo "Unsafe deploy path: $path" >&2
+                errors=$((errors + 1))
+                continue
+                ;;
+            esac
+            case "$path" in
+              .htaccess|.user.ini|php.ini)
+                echo "Root-level $path would affect every project under the domain root: $path" >&2
+                errors=$((errors + 1))
+                continue
+                ;;
+            esac
+            top="$(printf '%s' "${path%%/*}" | tr '[:upper:]' '[:lower:]')"
+            case "$reserved" in
+              *" $top "*)
+                echo "Top-level name is reserved by another project on the server: $path" >&2
+                errors=$((errors + 1))
+                ;;
+            esac
+          done < <(cd "$YC_STAGING_DIR" && find . -type f | sed 's#^\./##' | sort)
+
+          if [ "$errors" -gt 0 ]; then
+            echo "$errors path(s) rejected" >&2
+            exit 1
+          fi
+
+      - name: Configure SSH
+        env:
+          YC_SSH_PRIVATE_KEY: ${{ secrets.YC_SSH_PRIVATE_KEY }}
+          YC_SSH_KNOWN_HOSTS: ${{ secrets.YC_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${YC_SSH_PRIVATE_KEY:-}" ] || [ -z "${YC_SSH_KNOWN_HOSTS:-}" ]; then
+            echo "Set YC_SSH_PRIVATE_KEY and YC_SSH_KNOWN_HOSTS (production environment secrets) before deploying" >&2
+            exit 1
+          fi
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$YC_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 644 "$HOME/.ssh/known_hosts"
+          printf '%s\n' "$YC_SSH_PRIVATE_KEY" > "$YC_SSH_KEY_PATH"
+          chmod 600 "$YC_SSH_KEY_PATH"
+
+      - name: Upload
+        shell: bash
+        env:
+          YC_SSH_HOST: ${{ secrets.YC_SSH_HOST }}
+          YC_SSH_PORT: ${{ secrets.YC_SSH_PORT }}
+          YC_SSH_USER: ${{ secrets.YC_SSH_USER }}
+        run: |
+          set -euo pipefail
+          if [ -z "${YC_SSH_HOST:-}" ] || [ -z "${YC_SSH_PORT:-}" ] || [ -z "${YC_SSH_USER:-}" ]; then
+            echo "Set YC_SSH_HOST / YC_SSH_PORT / YC_SSH_USER (production environment secrets) before deploying" >&2
+            exit 1
+          fi
+
+          write_parent_mkdirs() {
+            local path="$1"
+            local dir="${path%/*}"
+            local current=""
+            if [ "$dir" = "$path" ]; then return 0; fi
+            IFS=/ read -ra parts <<< "$dir"
+            for part in "${parts[@]}"; do
+              [ -z "$part" ] && continue
+              current="${current:+$current/}$part"
+              printf -- '-mkdir %s\n' "$current"
+            done
+          }
+
+          mapfile -t deploy_files < <(cd "$YC_STAGING_DIR" && find . -type f -print | sed 's#^\./##' | sort)
+          if [ "${#deploy_files[@]}" -eq 0 ]; then
+            echo "No files to deploy"
+            exit 0
+          fi
+
+          batch_file="$(mktemp)"
+          {
+            printf 'cd %s\n' "$YC_REMOTE_ROOT"
+            for path in "${deploy_files[@]}"; do
+              write_parent_mkdirs "$path"
+              printf 'put %s %s.yc-upload.%s\n' "$YC_STAGING_DIR/$path" "$path" "$GITHUB_RUN_ID"
+              printf 'rename %s.yc-upload.%s %s\n' "$path" "$GITHUB_RUN_ID" "$path"
+              printf 'chmod 644 %s\n' "$path"
+            done
+          } > "$batch_file"
+
+          sftp \
+            -P "$YC_SSH_PORT" \
+            -i "$YC_SSH_KEY_PATH" \
+            -oBatchMode=yes \
+            -oIdentitiesOnly=yes \
+            -oStrictHostKeyChecking=yes \
+            -oConnectTimeout=15 \
+            -oServerAliveInterval=15 \
+            -oServerAliveCountMax=4 \
+            -b "$batch_file" \
+            "${YC_SSH_USER}@${YC_SSH_HOST}"
+          rm -f "$batch_file"
+          echo "Uploaded ${#deploy_files[@]} file(s)"
+
+      - name: Verify site
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' "$YC_SITE_URL" || true)"
+            if [ "$code" = "200" ]; then
+              echo "$YC_SITE_URL returned 200"
+              exit 0
+            fi
+            echo "Attempt $attempt: $YC_SITE_URL returned $code"
+            sleep 5
+          done
+          exit 1
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -f "$YC_SSH_KEY_PATH"
