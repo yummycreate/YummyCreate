@@ -180,14 +180,17 @@ jobs:
       - name: Verify site
         run: |
           set -euo pipefail
-          for attempt in 1 2 3 4 5; do
-            code="$(curl -sS -o /dev/null -w '%{http_code}' "$YC_SITE_URL" || true)"
+          # サーバー(LiteSpeed)のページキャッシュが直前の応答を返すことがあるため、
+          # 実行ごとに異なるクエリを付けてキャッシュを避け、最大約2分待つ
+          url="${YC_SITE_URL}?deploy=${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+          for attempt in $(seq 1 12); do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' "$url" || true)"
             if [ "$code" = "200" ]; then
-              echo "$YC_SITE_URL returned 200"
+              echo "$url returned 200"
               exit 0
             fi
-            echo "Attempt $attempt: $YC_SITE_URL returned $code"
-            sleep 5
+            echo "Attempt $attempt: $url returned $code"
+            sleep 10
           done
           exit 1
 
