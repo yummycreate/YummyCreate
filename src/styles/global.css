@@ -228,13 +228,60 @@ a {
 /* JS が動くときだけ、横めくりにする。動かないときは通常の縦スクロールの文章 */
 /* リーダーが動いている間は、ページ全体を画面の高さに固定し、本文だけを横に動かす */
 .reader-frame {
+  position: relative;
   flex: 1;
   display: flex;
   min-height: 0;
+  overflow: hidden;
+}
+
+.reader-fold {
+  display: none;
 }
 
 .reader-on .reader-frame {
   padding: 0 1rem;
+}
+
+/* めくっている途中の、ページの端と、次のページに落ちる影 */
+.reader-on .reader-fold {
+  display: block;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3.5rem;
+  margin-left: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 1;
+  /* 左半分は、めくる側の紙の端(わずかに明るく)。右半分は、そこから次のページに落ちる影 */
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.35) 49%,
+    rgba(0, 0, 0, 0.2) 50%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  will-change: transform, opacity;
+}
+
+@media (prefers-color-scheme: dark) {
+  .reader-on .reader-fold {
+    background: linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.12) 49%,
+      rgba(0, 0, 0, 0.55) 50%,
+      rgba(0, 0, 0, 0) 100%
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reader-on .reader-fold {
+    display: none;
+  }
 }
 
 .reader-snaps {
