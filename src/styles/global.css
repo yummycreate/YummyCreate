@@ -337,3 +337,63 @@ body:has(.reader-on) {
   margin-left: 0;
   margin-right: 0;
 }
+
+/* ---- 紙の回転(1ページ・2ページ表示) ---- */
+
+.reader-on .flip-stage {
+  position: absolute;
+  z-index: 2;
+  perspective: 2200px;
+  pointer-events: none;
+}
+
+.flip-face {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.flip-face .reader-body {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.flip-leaf {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  transform-origin: left center;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.flip-leaf .flip-face {
+  left: 0;
+}
+
+.flip-back {
+  transform: rotateY(180deg);
+}
+
+.flip-shade {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 立ち上がった紙が、下のページに落とす影(とじ目のそばが濃い) */
+.flip-shadow {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0) 60%);
+  opacity: 0;
+  pointer-events: none;
+}
