@@ -291,22 +291,22 @@ a {
 .reader-on .reader-viewport {
   position: relative;
   min-width: 0;
-  scroll-snap-type: x mandatory;
-  overscroll-behavior-x: contain;
+  /* 位置は常にJSで動かす。標準の横スクロールとスナップは使わない */
+  overflow-x: hidden;
+  touch-action: pan-y pinch-zoom;
+  overscroll-behavior: none;
 }
 
 .reader-on .reader-snaps {
   display: block;
 }
 
-/* ページの境目の目印。1スワイプで必ず1ページだけ進む */
+/* ページごとの幅の目印。最後のページまで動けるようにする */
 .reader-snaps i {
   position: absolute;
   top: 0;
   width: 1px;
   height: 1px;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
   visibility: hidden;
 }
 
@@ -318,14 +318,9 @@ body:has(.reader-on) {
 .reader-on .reader-viewport {
   flex: 1;
   min-height: 0;
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: hidden;
-  scrollbar-width: none;
   outline: none;
-}
-
-.reader-on .reader-viewport::-webkit-scrollbar {
-  display: none;
 }
 
 .reader-on .reader-body {

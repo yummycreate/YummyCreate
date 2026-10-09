@@ -113,12 +113,12 @@ const t = {
       // 最後の列の右端までを、1ページ分の幅で割る(端数は切り上げ。最後のページが欠けないように)
       snaps.replaceChildren();
       total = Math.max(1, Math.ceil((viewport.scrollWidth + gap()) / step() - 0.05));
-      // ページの境目ごとにスナップ位置を置く。これで1スワイプ=1ページになり、
-      // 最後のページが列の数で割り切れなくても、スクロールの上限に押し戻されず境目で止まる
+      // ページごとに1ページ分の幅の目印を置く。最後のページが列の数で割り切れなくても、
+      // スクロールの上限に押し戻されず、ページの境目まで動けるようにする
       for (let i = 0; i < total; i++) {
         const a = document.createElement('i');
         a.style.left = `${i * step()}px`;
-        a.style.width = `${viewport.clientWidth}px`; // 1ページ分の幅。最後のページまでスクロールできるようにする
+        a.style.width = `${viewport.clientWidth}px`;
         snaps.appendChild(a);
       }
       page = Math.min(total - 1, Math.max(0, Math.round(viewport.scrollLeft / step())));
@@ -159,6 +159,73 @@ const t = {
       if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); back(); }
     });
 
+    // スワイプ。ブラウザ標準の横スクロールには頼らず、指の動きを自分で受け取る。
+    // 指に追従して動き、離したときに「動いた距離」か「払った速さ」でめくる。足りなければ元のページに戻る。
+    // (マウスのドラッグは、文字を選択する操作と紛れるので対象外。マウスはボタン・キー・ホイールで操作する)
+    type Drag = { id: number; x: number; y: number; start: number; page: number; active: boolean; lastX: number; lastT: number; v: number };
+    let drag: Drag | null = null;
+    let swiped = false;
+
+    viewport.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' || !e.isPrimary) return;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, start: viewport.scrollLeft, page, active: false, lastX: e.clientX, lastT: e.timeStamp, v: 0 };
+    });
+
+    viewport.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dx = e.clientX - drag.x;
+      const dy = e.clientY - drag.y;
+      if (!drag.active) {
+        if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { drag = null; return; } // 縦の動きは対象外
+        if (Math.abs(dx) < 8) return;
+        drag.active = true;
+        viewport.setPointerCapture(e.pointerId);
+      }
+      const dt = e.timeStamp - drag.lastT;
+      if (dt > 0) drag.v = (e.clientX - drag.lastX) / dt; // 直近の速さ(px/ms)
+      drag.lastX = e.clientX;
+      drag.lastT = e.timeStamp;
+      viewport.scrollLeft = drag.start - dx; // 指に追従(ここで scroll が起き、影も動く)
+    });
+
+    function endDrag(e: PointerEvent) {
+      if (!drag || e.pointerId !== drag.id) return;
+      const d = drag;
+      drag = null;
+      if (!d.active) return;
+      swiped = true;
+      window.setTimeout(() => { swiped = false; }, 0);
+      const dx = e.clientX - d.x;
+      const flick = Math.abs(d.v) > 0.35;
+      const far = Math.abs(dx) > viewport.clientWidth * 0.2;
+      const dir = flick || far ? ((flick ? d.v : dx) < 0 ? 1 : -1) : 0;
+      if (dir === 1) {
+        if (d.page >= total - 1) { if (nextChapter) location.href = nextChapter; else go(d.page); }
+        else go(d.page + 1);
+      } else if (dir === -1) {
+        if (d.page === 0) { if (prevChapter) location.href = prevChapter; else go(0); }
+        else go(d.page - 1);
+      } else {
+        go(d.page);
+      }
+    }
+    viewport.addEventListener('pointerup', endDrag);
+    viewport.addEventListener('pointercancel', endDrag);
+    // スワイプの指を離した位置にリンクがあっても、リンクとして開かない
+    viewport.addEventListener('click', (e) => { if (swiped) { e.preventDefault(); e.stopPropagation(); } }, true);
+
+    // トラックパッドの横スワイプ、ホイール。慣性で続けて届くので、1回めくったらしばらく無視する
+    let wheelLock = 0;
+    viewport.addEventListener('wheel', (e) => {
+      const dominant = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (Math.abs(dominant) < 8) return;
+      e.preventDefault();
+      const now = performance.now();
+      if (now < wheelLock) return;
+      wheelLock = now + 500;
+      if (dominant > 0) forward(); else back();
+    }, { passive: false });
+
     // めくっている途中に、ページの端と影を重ねる。
     // 2ページの境目(スクロール量の端数)が画面を右から左へ横切るのに合わせて動かし、
     // 端のすぐ右(次のページ側)に影を落とす。境目にいるときは消える
@@ -177,12 +244,13 @@ const t = {
       }
     }
 
-    // スワイプで動いたときは、スナップ後の位置からページ番号を数え直す
+    // 動きが止まったら、位置からページ番号を数え直す
     let settle: number | undefined;
     viewport.addEventListener('scroll', () => {
       if (!raf) raf = requestAnimationFrame(drawFold);
       window.clearTimeout(settle);
       settle = window.setTimeout(() => {
+        if (drag?.active) return; // 指で動かしている間は、離したときに決める
         page = Math.min(total - 1, Math.max(0, Math.round(viewport.scrollLeft / step())));
         render();
       }, 80);
