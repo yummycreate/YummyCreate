@@ -1,0 +1,121 @@
+:root {
+  --bg: #fbfaf7;
+  --fg: #1f1d1a;
+  --muted: #6b665e;
+  --line: #e6e1d8;
+  --accent: #b4532a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171614;
+    --fg: #f2efe9;
+    --muted: #a39d93;
+    --line: #34312c;
+    --accent: #e08a5f;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  line-height: 1.7;
+}
+
+/* iOS Safariの入力時ズームを防ぐため、入力系は16px未満にしない */
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
+a {
+  color: var(--accent);
+}
+
+.draft-banner {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.home {
+  flex: 1;
+  width: 100%;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.hero {
+  padding: clamp(3rem, 14vh, 7rem) 0 clamp(2rem, 8vh, 4rem);
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2.25rem, 9vw, 3.75rem);
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+.tagline {
+  margin: 0.75rem 0 0;
+  font-size: clamp(1.05rem, 3.5vw, 1.35rem);
+  color: var(--muted);
+}
+
+.areas {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 3rem;
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+
+.areas li {
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.areas h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.areas p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+}
+
+.site-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.site-footer nav {
+  display: flex;
+  gap: 1rem;
+}

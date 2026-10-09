@@ -4,13 +4,15 @@
 
 ## 構成
 
-- `public/` — 公開ファイル(PHP＋静的ファイル、ビルドなし)
-- `.github/workflows/deploy.yml` — `main` への push でサーバーへデプロイ
+- `src/` — サイトのソース(Astro)。コンテンツは `src/content/`
+- `public/` — そのまま出力される静的ファイル
+- `.github/workflows/deploy.yml` — `main` への push でビルドしてサーバーへデプロイ
 
 ## ローカルで確認する
 
 ```bash
-php -S 127.0.0.1:8950 -t public
+npm install
+npm run dev
 ```
 
 ブラウザで http://127.0.0.1:8950/ を開きます。

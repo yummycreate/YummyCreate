@@ -1,6 +1,6 @@
 name: Deploy
 
-# public/ の中身を、サーバーのドメインルート(web/public_html)へアップロードする。
+# Astro でビルドした dist/ の中身を、サーバーのドメインルート(web/public_html)へアップロードする。
 # ドメインルートは他プロジェクトのディレクトリと同居しているため、
 #   - アップロードのみ行い、サーバー上のファイルは削除しない
 #   - 他プロジェクトのディレクトリ名(Secret YC_RESERVED_TOPLEVEL)と同じトップレベル名は拒否する
@@ -26,7 +26,7 @@ jobs:
       name: production
       url: https://yummycreate.com/
     env:
-      YC_SOURCE_DIR: public
+      YC_SOURCE_DIR: dist
       YC_REMOTE_ROOT: web/public_html
       YC_STAGING_DIR: /tmp/yummycreate-staging
       YC_SSH_KEY_PATH: /tmp/yc-deploy-key
@@ -35,6 +35,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
 
       - name: Assert deployment context
         run: |

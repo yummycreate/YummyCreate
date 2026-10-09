@@ -1,0 +1,64 @@
+---
+import '../styles/global.css';
+import { localeLabels, localePath, type Locale } from '../i18n';
+
+interface Props {
+  locale: Locale;
+  title: string;
+  description: string;
+  /** このページの言語版のうち、実際に出力される全言語(自分自身を含む)のパス */
+  alternates: { locale: Locale; path: string }[];
+  draft?: boolean;
+}
+
+const { locale, title, description, alternates, draft = false } = Astro.props;
+const site = Astro.site!;
+const url = (path: string) => new URL(path, site).href;
+const self = alternates.find((a) => a.locale === locale)!;
+const others = alternates.filter((a) => a.locale !== locale);
+const xDefault = alternates.find((a) => a.locale === 'ja') ?? alternates[0];
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'YummyCreate',
+  url: url(self.path),
+  inLanguage: locale,
+};
+---
+<!doctype html>
+<html lang={locale}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title}</title>
+  <meta name="description" content={description}>
+  <link rel="canonical" href={url(self.path)}>
+  {alternates.length > 1 && alternates.map((a) => (
+    <link rel="alternate" hreflang={a.locale} href={url(a.path)}>
+  ))}
+  {alternates.length > 1 && <link rel="alternate" hreflang="x-default" href={url(xDefault.path)}>}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="YummyCreate">
+  <meta property="og:title" content={title}>
+  <meta property="og:description" content={description}>
+  <meta property="og:url" content={url(self.path)}>
+  <meta property="og:locale" content={locale === 'ja' ? 'ja_JP' : 'en_US'}>
+  {draft && <meta name="robots" content="noindex">}
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)}></script>
+</head>
+<body>
+  {draft && <p class="draft-banner">DRAFT — 監修前の下書きです(開発サーバーのみ表示。本番には出力されません)</p>}
+  <slot />
+  <footer class="site-footer">
+    <small>© YummyCreate</small>
+    {others.length > 0 && (
+      <nav aria-label="Language">
+        {others.map((a) => (
+          <a href={a.path} hreflang={a.locale} lang={a.locale}>{localeLabels[a.locale]}</a>
+        ))}
+      </nav>
+    )}
+  </footer>
+</body>
+</html>

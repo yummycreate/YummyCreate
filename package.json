@@ -1,0 +1,13 @@
+{
+  "name": "yummycreate",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev --host 127.0.0.1 --port 8950",
+    "build": "astro build && node scripts/check-dist.mjs",
+    "preview": "astro preview --host 127.0.0.1 --port 8950"
+  },
+  "dependencies": {
+    "astro": "^7.3.8"
+  }
+}
