@@ -69,7 +69,7 @@ const t = {
           {next && <a href={href(next)}>{t.nextChapter}: {next.data.title} →</a>}
         </nav>
       </article>
-      <div class="reader-spacer" data-spacer aria-hidden="true"></div>
+      <div class="reader-snaps" data-snaps aria-hidden="true"></div>
     </div>
     </div>
 
@@ -88,7 +88,7 @@ const t = {
   if (root) {
     const viewport = root.querySelector<HTMLElement>('[data-viewport]')!;
     const body = root.querySelector<HTMLElement>('[data-body]')!;
-    const spacer = root.querySelector<HTMLElement>('[data-spacer]')!;
+    const snaps = root.querySelector<HTMLElement>('[data-snaps]')!;
     const controls = root.querySelector<HTMLElement>('[data-controls]')!;
     const prevBtn = root.querySelector<HTMLButtonElement>('[data-prev]')!;
     const nextBtn = root.querySelector<HTMLButtonElement>('[data-next]')!;
@@ -108,11 +108,16 @@ const t = {
 
     function measure() {
       // 最後の列の右端までを、1ページ分の幅で割る(端数は切り上げ。最後のページが欠けないように)
-      spacer.style.left = '0px';
+      snaps.replaceChildren();
       total = Math.max(1, Math.ceil((viewport.scrollWidth + gap()) / step() - 0.05));
-      // 最後のページが列の数で割り切れないとき、スクロールの上限に押し戻されて1つ前のページと重なる。
-      // ページの数ぶんの幅を確保して、最後もページの境目で止まるようにする
-      spacer.style.left = `${total * step() - gap() - 1}px`;
+      // ページの境目ごとにスナップ位置を置く。これで1スワイプ=1ページになり、
+      // 最後のページが列の数で割り切れなくても、スクロールの上限に押し戻されず境目で止まる
+      for (let i = 0; i < total; i++) {
+        const a = document.createElement('i');
+        a.style.left = `${i * step()}px`;
+        a.style.width = `${viewport.clientWidth}px`; // 1ページ分の幅。最後のページまでスクロールできるようにする
+        snaps.appendChild(a);
+      }
       page = Math.min(total - 1, Math.max(0, Math.round(viewport.scrollLeft / step())));
       render();
     }
@@ -151,16 +156,14 @@ const t = {
       if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); back(); }
     });
 
-    // 指のスワイプなどで止まった位置を、ページの境目に揃える
+    // スワイプで動いたときは、スナップ後の位置からページ番号を数え直す
     let settle: number | undefined;
     viewport.addEventListener('scroll', () => {
       window.clearTimeout(settle);
       settle = window.setTimeout(() => {
         page = Math.min(total - 1, Math.max(0, Math.round(viewport.scrollLeft / step())));
-        const target = page * step();
-        if (Math.abs(viewport.scrollLeft - target) > 1) viewport.scrollTo({ left: target, behavior: 'smooth' });
         render();
-      }, 120);
+      }, 80);
     }, { passive: true });
 
     // 画面幅の変更・フォント読み込みでページの割りが変わっても、いまのページに留まる

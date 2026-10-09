@@ -237,22 +237,29 @@ a {
   padding: 0 1rem;
 }
 
-.reader-spacer {
+.reader-snaps {
   display: none;
 }
 
 .reader-on .reader-viewport {
   position: relative;
   min-width: 0;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
 }
 
-.reader-on .reader-spacer {
+.reader-on .reader-snaps {
   display: block;
+}
+
+/* ページの境目の目印。1スワイプで必ず1ページだけ進む */
+.reader-snaps i {
   position: absolute;
   top: 0;
-  left: 0;
   width: 1px;
   height: 1px;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
   visibility: hidden;
 }
 
