@@ -45,6 +45,7 @@ const t = {
   description={d.description}
   alternates={alternates}
   draft={d.status !== 'published'}
+  noindex={d.noindex}
   hideFooter
 >
   <div class="reader" data-reader data-next-chapter={href(next)} data-prev-chapter={href(prev)}>

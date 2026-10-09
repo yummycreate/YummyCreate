@@ -30,6 +30,8 @@ const books = defineCollection({
     chapter: z.string(), // 章のID(URLの一部。順序の並び替えにも使う)
     title: z.string(),
     description: z.string(),
+    // 検索に出したくない公開ページ(動作確認用のサンプルなど)
+    noindex: z.boolean().default(false),
   }),
 });
 

@@ -1,6 +1,7 @@
 ---
 locale: ja
-status: draft
+status: published
+noindex: true
 book: guide
 bookTitle: リーダーの使い方
 chapter: '02'

@@ -9,11 +9,13 @@ interface Props {
   /** このページの言語版のうち、実際に出力される全言語(自分自身を含む)のパス */
   alternates: { locale: Locale; path: string }[];
   draft?: boolean;
+  /** 公開するが検索には出さない */
+  noindex?: boolean;
   /** リーダー画面など、1画面に収めたいページ用 */
   hideFooter?: boolean;
 }
 
-const { locale, title, description, alternates, draft = false, hideFooter = false } = Astro.props;
+const { locale, title, description, alternates, draft = false, noindex = false, hideFooter = false } = Astro.props;
 const site = Astro.site!;
 const url = (path: string) => new URL(path, site).href;
 const self = alternates.find((a) => a.locale === locale)!;
@@ -46,7 +48,7 @@ const jsonLd = {
   <meta property="og:description" content={description}>
   <meta property="og:url" content={url(self.path)}>
   <meta property="og:locale" content={locale === 'ja' ? 'ja_JP' : 'en_US'}>
-  {draft && <meta name="robots" content="noindex">}
+  {(draft || noindex) && <meta name="robots" content="noindex">}
   <script type="application/ld+json" set:html={JSON.stringify(jsonLd)}></script>
 </head>
 <body>
