@@ -1,0 +1,14 @@
+---
+import ChapterPage from '../../../components/ChapterPage.astro';
+import { getVisibleChapters } from '../../../lib/pages';
+
+export async function getStaticPaths() {
+  const all = await getVisibleChapters();
+  return all
+    .filter((e) => e.data.locale === 'ja')
+    .map((e) => ({ params: { book: e.data.book, chapter: e.data.chapter }, props: { entry: e } }));
+}
+
+const { entry } = Astro.props;
+---
+<ChapterPage entry={entry} />

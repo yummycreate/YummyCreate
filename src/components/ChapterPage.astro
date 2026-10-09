@@ -1,0 +1,176 @@
+---
+import Base from '../layouts/Base.astro';
+import { localeLabels, localePath, type Locale } from '../i18n';
+import {
+  chapterPath,
+  chaptersOf,
+  getVisibleChapters,
+  type ChapterEntry,
+} from '../lib/pages';
+import { render } from 'astro:content';
+
+interface Props {
+  entry: ChapterEntry;
+}
+
+const { entry } = Astro.props;
+const d = entry.data;
+const locale = d.locale as Locale;
+const all = await getVisibleChapters();
+
+// 同じ本の同じ章の、出力される言語版(hreflang と言語リンク)
+const alternates = all
+  .filter((e) => e.data.book === d.book && e.data.chapter === d.chapter)
+  .map((e) => ({
+    locale: e.data.locale as Locale,
+    path: chapterPath(e.data.locale as Locale, e.data.book, e.data.chapter),
+  }));
+
+const list = chaptersOf(all, locale, d.book);
+const i = list.findIndex((e) => e.id === entry.id);
+const prev = list[i - 1];
+const next = list[i + 1];
+const href = (e?: ChapterEntry) => (e ? chapterPath(locale, e.data.book, e.data.chapter) : undefined);
+
+const { Content } = await render(entry);
+
+const t = {
+  ja: { prev: '前へ', next: '次へ', nextChapter: '次の章へ', prevChapter: '前の章', home: 'トップ', page: 'ページ' },
+  en: { prev: 'Previous', next: 'Next', nextChapter: 'Next chapter', prevChapter: 'Previous chapter', home: 'Home', page: 'Page' },
+}[locale];
+---
+<Base
+  locale={locale}
+  title={`${d.title} | ${d.bookTitle} | YummyCreate`}
+  description={d.description}
+  alternates={alternates}
+  draft={d.status !== 'published'}
+  hideFooter
+>
+  <div class="reader" data-reader data-next-chapter={href(next)} data-prev-chapter={href(prev)}>
+    <header class="reader-head">
+      <a href={localePath(locale)}>{t.home}</a>
+      <span class="reader-book">{d.bookTitle}</span>
+      <nav aria-label="Language">
+        {alternates.filter((a) => a.locale !== locale).map((a) => (
+          <a href={a.path} hreflang={a.locale} lang={a.locale}>{localeLabels[a.locale]}</a>
+        ))}
+      </nav>
+    </header>
+
+    <div class="reader-frame">
+    <div class="reader-viewport" data-viewport tabindex="0">
+      <article class="reader-body" data-body>
+        <h1>{d.title}</h1>
+        <Content />
+        <nav class="chapter-links" aria-label="Chapters">
+          {prev && <a href={href(prev)}>← {t.prevChapter}: {prev.data.title}</a>}
+          {next && <a href={href(next)}>{t.nextChapter}: {next.data.title} →</a>}
+        </nav>
+      </article>
+      <div class="reader-spacer" data-spacer aria-hidden="true"></div>
+    </div>
+    </div>
+
+    <footer class="reader-controls" data-controls hidden>
+      <button type="button" data-prev>{t.prev}</button>
+      <span class="reader-count" aria-live="polite"><span data-current>1</span> / <span data-total>1</span></span>
+      <button type="button" data-next data-label-next={t.next} data-label-chapter={t.nextChapter}>{t.next}</button>
+    </footer>
+  </div>
+</Base>
+
+<script>
+  // 縦に長い通常の文章を、画面幅に応じて1〜3ページの横めくりに見せる。
+  // JSが動かない環境では、通常の縦スクロールの文章のまま読める(検索エンジンもこの形で読む)。
+  const root = document.querySelector<HTMLElement>('[data-reader]');
+  if (root) {
+    const viewport = root.querySelector<HTMLElement>('[data-viewport]')!;
+    const body = root.querySelector<HTMLElement>('[data-body]')!;
+    const spacer = root.querySelector<HTMLElement>('[data-spacer]')!;
+    const controls = root.querySelector<HTMLElement>('[data-controls]')!;
+    const prevBtn = root.querySelector<HTMLButtonElement>('[data-prev]')!;
+    const nextBtn = root.querySelector<HTMLButtonElement>('[data-next]')!;
+    const currentEl = root.querySelector<HTMLElement>('[data-current]')!;
+    const totalEl = root.querySelector<HTMLElement>('[data-total]')!;
+    const nextChapter = root.dataset.nextChapter;
+    const prevChapter = root.dataset.prevChapter;
+
+    root.classList.add('reader-on');
+    controls.hidden = false;
+
+    let page = 0;
+    let total = 1;
+
+    const gap = () => parseFloat(getComputedStyle(body).columnGap) || 0;
+    const step = () => viewport.clientWidth + gap();
+
+    function measure() {
+      // 最後の列の右端までを、1ページ分の幅で割る(端数は切り上げ。最後のページが欠けないように)
+      spacer.style.left = '0px';
+      total = Math.max(1, Math.ceil((viewport.scrollWidth + gap()) / step() - 0.05));
+      // 最後のページが列の数で割り切れないとき、スクロールの上限に押し戻されて1つ前のページと重なる。
+      // ページの数ぶんの幅を確保して、最後もページの境目で止まるようにする
+      spacer.style.left = `${total * step() - gap() - 1}px`;
+      page = Math.min(total - 1, Math.max(0, Math.round(viewport.scrollLeft / step())));
+      render();
+    }
+
+    function render() {
+      currentEl.textContent = String(page + 1);
+      totalEl.textContent = String(total);
+      const last = page >= total - 1;
+      prevBtn.disabled = page === 0 && !prevChapter;
+      nextBtn.disabled = last && !nextChapter;
+      nextBtn.textContent = last && nextChapter ? nextBtn.dataset.labelChapter! : nextBtn.dataset.labelNext!;
+    }
+
+    function go(to: number, smooth = true) {
+      page = Math.min(total - 1, Math.max(0, to));
+      viewport.scrollTo({ left: page * step(), behavior: smooth ? 'smooth' : 'auto' });
+      render();
+    }
+
+    function forward() {
+      if (page >= total - 1) {
+        if (nextChapter) location.href = nextChapter;
+      } else go(page + 1);
+    }
+    function back() {
+      if (page === 0) {
+        if (prevChapter) location.href = prevChapter;
+      } else go(page - 1);
+    }
+
+    nextBtn.addEventListener('click', forward);
+    prevBtn.addEventListener('click', back);
+
+    viewport.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); forward(); }
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); back(); }
+    });
+
+    // 指のスワイプなどで止まった位置を、ページの境目に揃える
+    let settle: number | undefined;
+    viewport.addEventListener('scroll', () => {
+      window.clearTimeout(settle);
+      settle = window.setTimeout(() => {
+        page = Math.min(total - 1, Math.max(0, Math.round(viewport.scrollLeft / step())));
+        const target = page * step();
+        if (Math.abs(viewport.scrollLeft - target) > 1) viewport.scrollTo({ left: target, behavior: 'smooth' });
+        render();
+      }, 120);
+    }, { passive: true });
+
+    // 画面幅の変更・フォント読み込みでページの割りが変わっても、いまのページに留まる
+    let keep = 0;
+    new ResizeObserver(() => {
+      keep = page;
+      measure();
+      go(Math.min(keep, total - 1), false);
+    }).observe(viewport);
+
+    viewport.focus({ preventScroll: true });
+    measure();
+  }
+</script>

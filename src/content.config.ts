@@ -19,4 +19,18 @@ const home = defineCollection({
   }),
 });
 
-export const collections = { home };
+// WEB書籍。1ファイル=1章=1URL。ファイル名は <book>-<chapter>.<locale>.md
+const books = defineCollection({
+  loader: glob({ pattern: '*.md', base: './src/content/books' }),
+  schema: z.object({
+    locale: z.enum(['ja', 'en']),
+    status,
+    book: z.string(), // 本のID(URLの一部)
+    bookTitle: z.string(),
+    chapter: z.string(), // 章のID(URLの一部。順序の並び替えにも使う)
+    title: z.string(),
+    description: z.string(),
+  }),
+});
+
+export const collections = { home, books };

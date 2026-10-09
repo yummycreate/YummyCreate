@@ -21,6 +21,8 @@
 
 - `src/` — サイトのソース
   - `src/content/` — コンテンツ(Markdown)。各ファイルに `status`(draft / reviewed / published)を持たせる。**published 以外は本番ビルドに出力されない**(開発サーバーでは確認用に表示)
+  - `src/content/books/` — WEB書籍の章。1ファイル=1章=1URL。ファイル名は `<book>-<chapter>.<locale>.md`。URLは `/book/<book>/<chapter>/`(英語は `/en/book/…`)
+  - `src/components/ChapterPage.astro` — 書籍リーダー。JSが動くときだけ画面幅に応じて1〜3ページの横めくりにし、JSなしでは通常の縦の文章として読める
   - `src/pages/` — ルーティング。`[...locale].astro` が言語別のトップページ、`sitemap.xml.ts` がsitemap(hreflang付き)
   - `src/layouts/` `src/styles/` `src/lib/` `src/i18n.ts`
 - `public/` — ビルドせずそのまま出力される静的ファイル(`robots.txt` など)

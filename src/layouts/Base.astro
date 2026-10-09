@@ -9,9 +9,11 @@ interface Props {
   /** このページの言語版のうち、実際に出力される全言語(自分自身を含む)のパス */
   alternates: { locale: Locale; path: string }[];
   draft?: boolean;
+  /** リーダー画面など、1画面に収めたいページ用 */
+  hideFooter?: boolean;
 }
 
-const { locale, title, description, alternates, draft = false } = Astro.props;
+const { locale, title, description, alternates, draft = false, hideFooter = false } = Astro.props;
 const site = Astro.site!;
 const url = (path: string) => new URL(path, site).href;
 const self = alternates.find((a) => a.locale === locale)!;
@@ -50,7 +52,7 @@ const jsonLd = {
 <body>
   {draft && <p class="draft-banner">DRAFT — 監修前の下書きです(開発サーバーのみ表示。本番には出力されません)</p>}
   <slot />
-  <footer class="site-footer">
+  {!hideFooter && <footer class="site-footer">
     <small>© YummyCreate</small>
     {others.length > 0 && (
       <nav aria-label="Language">
@@ -59,6 +61,6 @@ const jsonLd = {
         ))}
       </nav>
     )}
-  </footer>
+  </footer>}
 </body>
 </html>
