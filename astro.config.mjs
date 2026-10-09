@@ -10,6 +10,8 @@ export default defineConfig({
     routing: { prefixDefaultLocale: false },
   },
   build: {
+    // CSS はHTMLに埋め込む(別ファイルの読み込みに依存しない)
+    inlineStylesheets: 'always',
     // 既定の _astro はデプロイ時のパス検証(英数字と . _ / - のみ、かつ先頭が予約名でない)に紛れやすいので固定する
     assets: 'assets',
   },

@@ -1,0 +1,345 @@
+// WEB書籍リーダー(ChapterPage.astro から ?raw で読み込み、HTMLに埋め込む)
+// 縦に長い通常の文章を、画面幅に応じて1〜3ページの横めくりに見せる。
+// JSが動かない環境では、通常の縦スクロールの文章のまま読める(検索エンジンもこの形で読む)。
+//
+// めくり方は2通り:
+//   紙の回転(1ページ・2ページ表示): めくる瞬間だけ、現在と次のページを「紙」として重ね、とじ目を軸に回す
+//   横スライド(3ページ表示、視覚効果を減らす設定): 位置を動かし、ページの端と影を重ねる
+const root = document.querySelector('[data-reader]');
+if (root) {
+  const viewport = root.querySelector('[data-viewport]');
+  const frame = root.querySelector('.reader-frame');
+  const body = root.querySelector('[data-body]');
+  const snaps = root.querySelector('[data-snaps]');
+  const fold = root.querySelector('[data-fold]');
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const controls = root.querySelector('[data-controls]');
+  const prevBtn = root.querySelector('[data-prev]');
+  const nextBtn = root.querySelector('[data-next]');
+  const currentEl = root.querySelector('[data-current]');
+  const totalEl = root.querySelector('[data-total]');
+  const nextChapter = root.dataset.nextChapter;
+  const prevChapter = root.dataset.prevChapter;
+
+  root.classList.add('reader-on');
+  controls.hidden = false;
+
+  let page = 0;
+  let total = 1;
+
+  const gap = () => parseFloat(getComputedStyle(body).columnGap) || 0;
+  const step = () => viewport.clientWidth + gap();
+  const cols = () => parseInt(getComputedStyle(body).columnCount, 10) || 1;
+  const colWidth = () => (viewport.clientWidth - (cols() - 1) * gap()) / cols();
+
+  function measure() {
+    // 最後の列の右端までを、1ページ分の幅で割る(端数は切り上げ。最後のページが欠けないように)
+    snaps.replaceChildren();
+    total = Math.max(1, Math.ceil((viewport.scrollWidth + gap()) / step() - 0.05));
+    // ページごとに1ページ分の幅の目印を置く。最後のページが列の数で割り切れなくても、
+    // スクロールの上限に押し戻されず、ページの境目まで動けるようにする
+    for (let i = 0; i < total; i++) {
+      const a = document.createElement('i');
+      a.style.left = `${i * step()}px`;
+      a.style.width = `${viewport.clientWidth}px`;
+      snaps.appendChild(a);
+    }
+    page = Math.min(total - 1, Math.max(0, Math.round(viewport.scrollLeft / step())));
+    render();
+  }
+
+  function render() {
+    currentEl.textContent = String(page + 1);
+    totalEl.textContent = String(total);
+    const last = page >= total - 1;
+    prevBtn.disabled = page === 0 && !prevChapter;
+    nextBtn.disabled = last && !nextChapter;
+    nextBtn.textContent = last && nextChapter ? nextBtn.dataset.labelChapter : nextBtn.dataset.labelNext;
+  }
+
+  function go(to, smooth = true) {
+    page = Math.min(total - 1, Math.max(0, to));
+    viewport.scrollTo({ left: page * step(), behavior: smooth && !reduceMotion.matches ? 'smooth' : 'auto' });
+    render();
+  }
+
+  // ---- 紙の回転 ----
+  // めくる瞬間だけ、本文の複製を「ページの窓」として並べ、とじ目を軸に回る紙を重ねる。
+  // 前進: 紙の表=いまの右ページ、裏=次の見開きの左ページ。下には、いまの左ページと次の見開きの右ページ
+  // 後退: 紙の表=前の見開きの右ページ、裏=いまの左ページ。下には、前の見開きの左ページといまの右ページ
+  // 1ページ表示では、左端をとじ目に、いまのページ(または前のページ)が1枚で回る
+  const flipOn = () => !reduceMotion.matches && cols() <= 2;
+
+  let flip = null;
+  let busy = false;
+
+  function makeFace(col) {
+    const face = document.createElement('div');
+    face.className = 'flip-face';
+    face.style.width = `${colWidth()}px`;
+    if (col >= 0) {
+      const copy = body.cloneNode(true);
+      copy.removeAttribute('data-body');
+      copy.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+      copy.style.width = `${viewport.clientWidth}px`;
+      copy.style.transform = `translateX(${-col * (colWidth() + gap())}px)`;
+      face.appendChild(copy);
+    }
+    const shade = document.createElement('div');
+    shade.className = 'flip-shade';
+    face.appendChild(shade);
+    return face;
+  }
+
+  function beginFlip(dir) {
+    const n = cols();
+    const w = colWidth();
+    const hingeX = (n - 1) * (w + gap()); // 右ページの左端(1ページ表示では0)
+    const base = page * n;
+
+    const stage = document.createElement('div');
+    stage.className = 'flip-stage';
+    stage.setAttribute('aria-hidden', 'true');
+    stage.setAttribute('inert', '');
+    stage.style.left = `${viewport.offsetLeft}px`;
+    stage.style.top = `${viewport.offsetTop}px`;
+    stage.style.width = `${viewport.clientWidth}px`;
+    stage.style.height = `${viewport.clientHeight}px`;
+
+    // 下に敷くページ
+    const underRCol = dir === 1 ? base + 2 * n - 1 : base + n - 1;
+    const underR = makeFace(underRCol);
+    underR.style.left = `${hingeX}px`;
+    stage.appendChild(underR);
+    if (n === 2) {
+      const underLCol = dir === 1 ? base : base - n;
+      const underL = makeFace(underLCol);
+      underL.style.left = '0px';
+      stage.appendChild(underL);
+    }
+
+    // 紙が、次のページに落とす影
+    const shadow = document.createElement('div');
+    shadow.className = 'flip-shadow';
+    shadow.style.left = `${hingeX}px`;
+    shadow.style.width = `${w}px`;
+    stage.appendChild(shadow);
+
+    // 回る紙
+    const leaf = document.createElement('div');
+    leaf.className = 'flip-leaf';
+    leaf.style.left = `${hingeX}px`;
+    leaf.style.width = `${w}px`;
+    const frontCol = dir === 1 ? base + n - 1 : base - 1;
+    const backCol = n === 2 ? (dir === 1 ? base + n : base) : -1; // 1ページ表示の裏は白紙
+    const front = makeFace(frontCol);
+    const back = makeFace(backCol);
+    back.classList.add('flip-back');
+    leaf.append(front, back);
+    stage.appendChild(leaf);
+
+    frame.appendChild(stage);
+    const f = { dir, stage, leaf, shadow, shades: [front.lastElementChild, back.lastElementChild], progress: 0 };
+    flip = f;
+    setProgress(f, 0);
+    return f;
+  }
+
+  // 0 = めくる前、1 = めくり終わり。紙の角度、影の濃さをここでまとめて決める
+  function setProgress(f, p) {
+    f.progress = Math.min(1, Math.max(0, p));
+    const angle = f.dir === 1 ? -180 * f.progress : -180 * (1 - f.progress);
+    f.leaf.style.transform = `rotateY(${angle}deg)`;
+    const lift = Math.sin(Math.PI * f.progress); // 立ち上がった真ん中で最大
+    f.shadow.style.opacity = String(lift * 0.9);
+    const edgeOn = Math.abs(Math.sin((angle * Math.PI) / 180)); // 紙が正面を向くほど暗く
+    f.shades[0].style.opacity = String(edgeOn * 0.3);
+    f.shades[1].style.opacity = String(edgeOn * 0.3);
+  }
+
+  function animateTo(f, target) {
+    return new Promise((resolve) => {
+      const from = f.progress;
+      const dist = Math.abs(target - from);
+      if (dist < 0.001) { resolve(); return; }
+      const ms = 120 + 460 * dist;
+      const t0 = performance.now();
+      const tick = (now) => {
+        const t = Math.min(1, (now - t0) / ms);
+        const eased = 1 - Math.pow(1 - t, 3);
+        setProgress(f, from + (target - from) * eased);
+        if (t < 1) requestAnimationFrame(tick);
+        else resolve();
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  function endFlip(f, commit) {
+    if (commit) page = Math.min(total - 1, Math.max(0, page + f.dir));
+    viewport.scrollTo({ left: page * step(), behavior: 'auto' });
+    f.stage.remove();
+    flip = null;
+    busy = false;
+    render();
+  }
+
+  async function flipTurn(dir) {
+    busy = true;
+    const f = beginFlip(dir);
+    await animateTo(f, 1);
+    endFlip(f, true);
+  }
+
+  function forward() {
+    if (busy) return;
+    if (page >= total - 1) { if (nextChapter) location.href = nextChapter; return; }
+    if (flipOn()) flipTurn(1); else go(page + 1);
+  }
+  function back() {
+    if (busy) return;
+    if (page === 0) { if (prevChapter) location.href = prevChapter; return; }
+    if (flipOn()) flipTurn(-1); else go(page - 1);
+  }
+
+  nextBtn.addEventListener('click', forward);
+  prevBtn.addEventListener('click', back);
+
+  viewport.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); forward(); }
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); back(); }
+  });
+
+  // ---- スワイプ ----
+  // ブラウザ標準の横スクロールには頼らず、指の動きを自分で受け取る。
+  // 指に追従して動き、離したときに「動いた距離」か「払った速さ」でめくる。足りなければ元のページに戻る。
+  // (マウスのドラッグは、文字を選択する操作と紛れるので対象外。マウスはボタン・キー・ホイールで操作する)
+  let drag = null;
+  let swiped = false;
+
+  viewport.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || !e.isPrimary || busy) return;
+    drag = {
+      id: e.pointerId, x: e.clientX, y: e.clientY, start: viewport.scrollLeft, page,
+      active: false, lastX: e.clientX, lastT: e.timeStamp, v: 0, flip: null, dir: 1,
+    };
+  });
+
+  viewport.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    if (!drag.active) {
+      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { drag = null; return; } // 縦の動きは対象外
+      if (Math.abs(dx) < 8) return;
+      drag.active = true;
+      drag.dir = dx < 0 ? 1 : -1;
+      try { viewport.setPointerCapture(e.pointerId); } catch { /* 取得できなくても動かす */ }
+      const canTurn = drag.dir === 1 ? page < total - 1 : page > 0;
+      if (flipOn() && canTurn) { busy = true; drag.flip = beginFlip(drag.dir); }
+    }
+    const dt = e.timeStamp - drag.lastT;
+    if (dt > 0) drag.v = (e.clientX - drag.lastX) / dt; // 直近の速さ(px/ms)
+    drag.lastX = e.clientX;
+    drag.lastT = e.timeStamp;
+    if (drag.flip) {
+      // 動かした向きが最初と逆なら、めくる前に戻す
+      const along = (drag.dir === 1 ? -dx : dx) / (colWidth() + gap());
+      setProgress(drag.flip, along);
+    } else if (!flipOn()) {
+      viewport.scrollLeft = drag.start - dx; // 横スライド: 指に追従(ここで scroll が起き、影も動く)
+    }
+  });
+
+  async function endDrag(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag;
+    drag = null;
+    if (!d.active) return;
+    swiped = true;
+    window.setTimeout(() => { swiped = false; }, 0);
+    const dx = e.clientX - d.x;
+    const flick = Math.abs(d.v) > 0.35;
+    const far = Math.abs(dx) > viewport.clientWidth * 0.2;
+    const dir = flick || far ? ((flick ? d.v : dx) < 0 ? 1 : -1) : 0;
+
+    if (d.flip) {
+      // 向きが合っていて、距離か速さが足りていればめくり切る。足りなければ元に戻す
+      const commit = dir === d.dir;
+      await animateTo(d.flip, commit ? 1 : 0);
+      endFlip(d.flip, commit);
+      return;
+    }
+    if (flipOn()) {
+      // 最初・最後のページを越えて払ったときは、章をまたぐ
+      if (dir === 1 && d.page >= total - 1 && nextChapter) location.href = nextChapter;
+      else if (dir === -1 && d.page === 0 && prevChapter) location.href = prevChapter;
+      return;
+    }
+    if (dir === 1) {
+      if (d.page >= total - 1) { if (nextChapter) location.href = nextChapter; else go(d.page); }
+      else go(d.page + 1);
+    } else if (dir === -1) {
+      if (d.page === 0) { if (prevChapter) location.href = prevChapter; else go(0); }
+      else go(d.page - 1);
+    } else {
+      go(d.page);
+    }
+  }
+  viewport.addEventListener('pointerup', endDrag);
+  viewport.addEventListener('pointercancel', endDrag);
+  // スワイプの指を離した位置にリンクがあっても、リンクとして開かない
+  viewport.addEventListener('click', (e) => { if (swiped) { e.preventDefault(); e.stopPropagation(); } }, true);
+
+  // トラックパッドの横スワイプ、ホイール。慣性で続けて届くので、1回めくったらしばらく無視する
+  let wheelLock = 0;
+  viewport.addEventListener('wheel', (e) => {
+    const dominant = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (Math.abs(dominant) < 8) return;
+    e.preventDefault();
+    const now = performance.now();
+    if (now < wheelLock) return;
+    wheelLock = now + 700;
+    if (dominant > 0) forward(); else back();
+  }, { passive: false });
+
+  // ---- 横スライド時の、ページの端と影 ----
+  // 2ページの境目(スクロール量の端数)が画面を右から左へ横切るのに合わせて動かし、
+  // 端のすぐ右(次のページ側)に影を落とす。境目にいるときは消える
+  let raf = 0;
+  function drawFold() {
+    raf = 0;
+    if (reduceMotion.matches || flip) { fold.style.opacity = '0'; return; }
+    const st = step();
+    const frac = (viewport.scrollLeft % st) / st;
+    const moving = frac > 0.002 && frac < 0.998;
+    fold.style.opacity = moving ? String(Math.sin(Math.PI * frac)) : '0';
+    if (moving) {
+      const edge = viewport.offsetLeft + (1 - frac) * st - gap() / 2;
+      fold.style.transform = `translateX(${edge - fold.offsetWidth / 2}px)`; // 影の中心線が端に来るようにする
+    }
+  }
+
+  // 動きが止まったら、位置からページ番号を数え直す
+  let settle;
+  viewport.addEventListener('scroll', () => {
+    if (!raf) raf = requestAnimationFrame(drawFold);
+    window.clearTimeout(settle);
+    settle = window.setTimeout(() => {
+      if (drag?.active || busy) return; // 指で動かしている間・めくっている間は、終わったときに決める
+      page = Math.min(total - 1, Math.max(0, Math.round(viewport.scrollLeft / step())));
+      render();
+    }, 80);
+  }, { passive: true });
+
+  // 画面幅の変更・フォント読み込みでページの割りが変わっても、いまのページに留まる
+  new ResizeObserver(() => {
+    if (flip) { flip.stage.remove(); flip = null; busy = false; drag = null; }
+    const keep = page;
+    measure();
+    go(Math.min(keep, total - 1), false);
+  }).observe(viewport);
+
+  viewport.focus({ preventScroll: true });
+  measure();
+}
