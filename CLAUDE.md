@@ -1,3 +1,5 @@
+@AGENTS.md
+
 # YummyCreate — Claude 運用メモ
 
 `https://yummycreate.com/` のドメインルートに置く公開サイトです。Astro(静的サイトジェネレーター)でビルドした静的HTMLを置く構成です。サーバー側でPHP等は動かしません。
@@ -29,7 +31,6 @@
 - `dist/` — ビルド成果物。**これがデプロイ対象**(Git管理外)
 - `scripts/check-dist.mjs` — `dist/` のパスがデプロイのパス検証を通るかをビルド時に確認
 - `.github/workflows/deploy.yml` — ビルドとデプロイ
-- `.aic/tasks/` — 作業単位(グローバルフックが編集の前提として要求する)
 - `.claude/launch.json` — ローカル確認用の開発サーバー設定
 
 ### 多言語
@@ -73,6 +74,5 @@ http://127.0.0.1:8950/ を開く。本番相当の出力は `npm run build`(`dis
 
 ## 作業の進め方
 
-- ファイル編集にはグローバルフックの都合で、作業ブランチ・worktree・`.aic/tasks/` の作業単位が必要。
 - 作業ブランチで編集 → ビルド確認 → `main` にマージして push(= デプロイ)→ 公開URLで確認。**動作確認は公開ページで行うので、実装後は必ずデプロイする。** ただし `status` が published でない文面は公開されない(監修前の下書きを published にしない)。
 - 入力系(`input`/`textarea`/`select`)のフォントサイズは16px未満にしない(iOS Safariの入力時ズーム防止)。
