@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}\"/.agents/hooks/stop-require-merge.mjs --tool claude",
+            "timeout": 60,
+            "statusMessage": "PRのマージ状態を確認中"
+          }
+        ]
+      }
+    ]
+  }
+}

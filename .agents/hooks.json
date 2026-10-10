@@ -1,0 +1,11 @@
+{
+  "aic-stop-require-merge": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "node .agents/hooks/stop-require-merge.mjs --tool antigravity",
+        "timeout": 60
+      }
+    ]
+  }
+}

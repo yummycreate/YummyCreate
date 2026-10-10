@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "command": "node .agents/hooks/stop-require-merge.mjs --tool cursor",
+        "timeout": 60
+      }
+    ]
+  }
+}
